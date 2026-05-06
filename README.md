@@ -1,4 +1,4 @@
-# Hybrid RAG PDF Question Answering System
+# Hybrid RAG PDF Question Answering System For Research Papers
 
 A Retrieval-Augmented Generation (RAG) system for querying PDF documents using hybrid retrieval, reranking, and streaming LLM responses.
 
