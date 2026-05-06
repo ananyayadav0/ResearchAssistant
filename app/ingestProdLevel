@@ -1,0 +1,134 @@
+import os
+import re
+import hashlib
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+
+import fitz  # PyMuPDF
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import Chroma
+from langchain.embeddings import HuggingFaceEmbeddings
+
+# ---------------- CONFIG ----------------
+DB_DIR = "chroma_db"
+BATCH_SIZE = 64
+MAX_WORKERS = 4
+
+logging.basicConfig(level=logging.INFO)
+
+# ---------------- INIT ----------------
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=800,
+    chunk_overlap=100
+)
+
+# ---------------- HELPERS ----------------
+def clean_text(text: str) -> str:
+    text = text.replace("\n", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+def generate_chunk_id(file_path, page_num, chunk):
+    unique_str = f"{file_path}_{page_num}_{chunk}"
+    return hashlib.md5(unique_str.encode()).hexdigest()
+
+def ocr_fallback(page):
+    # Placeholder for OCR (e.g., pytesseract)
+    return ""
+
+# ---------------- PROCESS PAGE ----------------
+def process_page(doc, file_path, page_num):
+    try:
+        page = doc[page_num]
+        text = page.get_text("text")
+
+        if not isinstance(text, str) or not text.strip():
+            text = ocr_fallback(page)
+
+        if not text.strip():
+            return []
+
+        text = clean_text(text)
+        chunks = splitter.split_text(text)
+
+        results = []
+        for i, chunk in enumerate(chunks):
+            if len(chunk) < 30:  # drop tiny chunks
+                continue
+
+            chunk_id = generate_chunk_id(file_path, page_num, chunk)
+
+            metadata = {
+                "source": os.path.basename(file_path),
+                "file_path": file_path,
+                "page": page_num,
+                "chunk_id": chunk_id,
+                "chunk_index": i,
+                "ingested_at": datetime.utcnow().isoformat(),
+                "embedding_model": "all-MiniLM-L6-v2"
+            }
+
+            results.append((chunk, metadata, chunk_id))
+
+        return results
+
+    except Exception as e:
+        logging.error(f"Error processing page {page_num} of {file_path}: {e}")
+        return []
+
+# ---------------- MAIN INGEST ----------------
+def ingest_pdf(file_path):
+    logging.info(f"Ingesting {file_path}")
+
+    doc = fitz.open(file_path)
+
+    # Initialize / load DB
+    vectordb = Chroma(
+        persist_directory=DB_DIR,
+        embedding_function=embeddings
+    )
+
+    batch_texts, batch_meta, batch_ids = [], [], []
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [
+            executor.submit(process_page, doc, file_path, i)
+            for i in range(len(doc))
+        ]
+
+        for future in as_completed(futures):
+            results = future.result()
+
+            for chunk, metadata, chunk_id in results:
+                batch_texts.append(chunk)
+                batch_meta.append(metadata)
+                batch_ids.append(chunk_id)
+
+                if len(batch_texts) >= BATCH_SIZE:
+                    vectordb.add_texts(
+                        texts=batch_texts,
+                        metadatas=batch_meta,
+                        ids=batch_ids
+                    )
+                    logging.info(f"Inserted batch of {len(batch_texts)}")
+
+                    batch_texts, batch_meta, batch_ids = [], [], []
+
+    # flush remaining
+    if batch_texts:
+        vectordb.add_texts(
+            texts=batch_texts,
+            metadatas=batch_meta,
+            ids=batch_ids
+        )
+        logging.info(f"Inserted final batch of {len(batch_texts)}")
+
+    vectordb.persist()
+    doc.close()
+
+    logging.info(f"Completed ingestion: {file_path}")
