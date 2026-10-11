@@ -1,59 +1,70 @@
+import hashlib
+import os
+import re
+
 import fitz  # PyMuPDF
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
-import fitz
-import os
 
-DB_DIR = "chroma_db"
+from app.store import vectordb
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+MIN_CHUNK_CHARS = 30
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=800,
+    chunk_overlap=100
 )
 
-def ingest_pdf(file_path):
-    doc = fitz.open(file_path)
-    texts = []
-    metadatas = []
-    
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=100
-    )
-    
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        page_text = page.get_text("text")
 
-        if isinstance(page_text, str) and page_text.strip():
-            chunks = splitter.split_text(page_text)
+def clean_text(text: str) -> str:
+    # Re-join words hyphenated across line breaks, then collapse whitespace
+    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+    return re.sub(r"\s+", " ", text).strip()
 
-            for chunk in chunks:
+
+def file_hash(file_path: str) -> str:
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def ingest_pdf(file_path: str, source_name: str | None = None) -> int:
+    """Chunk a PDF and upsert it into the vector store. Returns the chunk count.
+
+    Chunk ids are derived from the file's content hash, so re-uploading the
+    same PDF overwrites its chunks instead of duplicating them.
+    """
+    source = source_name or os.path.basename(file_path)
+    doc_hash = file_hash(file_path)
+
+    texts, metadatas, ids = [], [], []
+
+    with fitz.open(file_path) as doc:
+        for page_num, page in enumerate(doc, start=1):
+            page_text = page.get_text("text")
+            if not isinstance(page_text, str) or not page_text.strip():
+                continue
+
+            chunks = splitter.split_text(clean_text(page_text))
+            for i, chunk in enumerate(chunks):
+                if len(chunk) < MIN_CHUNK_CHARS:
+                    continue
                 texts.append(chunk)
                 metadatas.append({
-                    "source": os.path.basename(file_path),
+                    "source": source,
                     "page": page_num,
-                    "file_path": file_path
+                    "chunk_index": i,
+                    "file_path": file_path,
+                    "file_hash": doc_hash,
                 })
+                ids.append(f"{doc_hash[:16]}-p{page_num}-c{i}")
 
     if not texts:
-        raise ValueError("No text extracted from PDF")
-    print("Ingesting chunks:", len(texts))
-    print("Metadata sample:", metadatas[:2])
+        raise ValueError("No text extracted from PDF (it may be scanned or image-only)")
 
-    # Append or create DB
-    if os.path.exists(DB_DIR):
-        vectordb = Chroma(
-            persist_directory=DB_DIR,
-            embedding_function=embeddings
-        )
-        vectordb.add_texts(texts=texts, metadatas=metadatas)
-    else:
-        vectordb = Chroma.from_texts(
-            texts=texts,
-            embedding=embeddings,
-            metadatas=metadatas,
-            persist_directory=DB_DIR
-        )
+    print(f"Ingesting {len(texts)} chunks from {source}")
 
-    vectordb.persist()
+    # langchain_chroma upserts by id and persists automatically
+    vectordb.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+    return len(texts)

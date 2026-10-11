@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Assistant</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #ffffff; --sidebar: #f5f5f5; --text: #111111; --muted: #666666;
+    --border: #dddddd; --accent: #111111; --accent-soft: #eeeeee; --accent-text: #ffffff;
+    --user-bg: #f0f0f0; --user-text: #111111; --error: #b00020; --ok: #2e7d32; --warn: #8a6d00;
+    --shadow: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212; --panel: #121212; --sidebar: #1a1a1a; --text: #eeeeee; --muted: #999999;
+      --border: #333333; --accent: #eeeeee; --accent-soft: #262626; --accent-text: #121212;
+      --user-bg: #262626; --user-text: #eeeeee; --error: #ff6b6b; --ok: #81c784; --warn: #d4b106;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: grid; grid-template-columns: 300px 1fr; overflow: hidden;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- Sidebar ---------- */
+  aside {
+    background: var(--sidebar); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .brand { padding: 18px 18px 12px; display: flex; align-items: center; gap: 10px; }
+  .brand h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  .dropzone {
+    margin: 4px 14px 12px; padding: 12px; border: 1px dashed var(--border); border-radius: 4px;
+    text-align: center; font-size: 13px; color: var(--muted); cursor: pointer; transition: .15s;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  .dropzone strong { color: var(--text); font-weight: 500; }
+  .upload-status { margin: -4px 16px 10px; font-size: 12.5px; color: var(--muted); min-height: 0; }
+  .upload-status:empty { display: none; }
+  .upload-status.ok { color: var(--ok); }
+  .upload-status.err { color: var(--error); }
+  .section-label {
+    padding: 6px 18px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  nav { flex: 1; overflow-y: auto; padding: 0 10px 14px; }
+  .paper {
+    width: 100%; text-align: left; border: 0; background: transparent; color: var(--text);
+    padding: 8px 10px; border-radius: 4px; display: flex; gap: 10px; align-items: flex-start;
+    margin-bottom: 2px;
+  }
+  .paper:hover { background: var(--accent-soft); }
+  .paper.active { background: var(--accent-soft); font-weight: 600; }
+  .paper .meta { min-width: 0; flex: 1; }
+  .paper .name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .paper .sub { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .badge { font-size: 11.5px; }
+  .badge.ready { color: var(--ok); }
+  .badge.building { color: var(--warn); }
+  .no-papers { padding: 10px 18px; font-size: 13px; color: var(--muted); }
+
+  /* ---------- Chat ---------- */
+  .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100vh; }
+  .topbar {
+    padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
+    display: flex; align-items: center; gap: 12px; min-height: 58px;
+  }
+  .menu-btn { display: none; border: 1px solid var(--border); background: transparent; color: var(--text);
+              border-radius: 8px; width: 36px; height: 36px; font-size: 18px; }
+  .topbar .title { min-width: 0; }
+  .topbar .title .label { font-size: 12px; color: var(--muted); }
+  .topbar .title .value { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  main { flex: 1; overflow-y: auto; padding: 28px 20px; }
+  .thread { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  .welcome { text-align: center; margin-top: 8vh; color: var(--muted); }
+  .welcome h2 { color: var(--text); font-size: 18px; font-weight: 600; margin: 0 0 6px; }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 20px; }
+  .chip {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 6px 12px; border-radius: 4px; font-size: 14px;
+  }
+  .chip:hover { background: var(--accent-soft); }
+  .msg { padding: 12px 16px; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { background: var(--user-bg); color: var(--user-text); align-self: flex-end; max-width: 80%;
+              }
+  .msg.bot { background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+             }
+  .msg.bot.error { color: var(--error); }
+  .msg .scope-tag { font-size: 12px; color: var(--muted); margin-bottom: 6px; white-space: normal; }
+  .thinking { color: var(--muted); font-style: italic; display: inline-flex; align-items: center; gap: 8px; }
+  .thinking::before {
+    content: ""; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--muted); animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sources { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+             font-size: 12.5px; color: var(--muted); white-space: normal; display: flex; flex-wrap: wrap; gap: 6px; }
+  .sources .src { }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em;
+         background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+
+  footer { padding: 14px 20px 18px; background: var(--bg); }
+  form.ask {
+    max-width: 800px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px;
+    box-shadow: var(--shadow);
+  }
+  form.ask:focus-within { border-color: var(--muted); }
+  textarea {
+    flex: 1; resize: none; min-height: 40px; max-height: 160px; padding: 9px 10px; border: 0;
+    background: transparent; color: var(--text); font: inherit; outline: none;
+  }
+  .send {
+    border: 0; border-radius: 4px; padding: 0 16px; height: 36px; font-weight: 500;
+    background: var(--accent); color: var(--accent-text);
+  }
+  .send:disabled { opacity: .45; cursor: default; }
+  .hint { max-width: 800px; margin: 6px auto 0; font-size: 12px; color: var(--muted); text-align: center; }
+  input[type=file] { display: none; }
+
+  /* ---------- Mobile: sidebar becomes a drawer ---------- */
+  .backdrop { display: none; }
+  @media (max-width: 800px) {
+    body { grid-template-columns: 1fr; }
+    aside {
+      position: fixed; inset: 0 auto 0 0; width: 85vw; max-width: 320px; z-index: 20;
+      transform: translateX(-100%); transition: transform .2s;
+    }
+    body.nav-open aside { transform: none; }
+    body.nav-open .backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 10; }
+    .menu-btn { display: block; }
+    main { padding: 20px 16px; }
+    footer { padding: 10px 16px 14px; }
+    .msg.user { max-width: 90%; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><h1>Research Assistant</h1></div>
+
+  <div class="dropzone" id="dropzone" role="button" tabindex="0">
+    <strong>Upload PDF</strong><br>or drop a paper here
+    <input type="file" id="fileInput" accept="application/pdf,.pdf">
+  </div>
+  <div class="upload-status" id="uploadStatus"></div>
+
+  <div class="section-label">Papers</div>
+  <nav id="paperList"></nav>
+</aside>
+<div class="backdrop" id="backdrop"></div>
+
+<section class="chat">
+  <div class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="Show papers">☰</button>
+    <div class="title">
+      <div class="label">Asking about</div>
+      <div class="value" id="scopeTitle">All papers</div>
+    </div>
+  </div>
+
+  <main id="scroller"><div class="thread" id="thread"></div></main>
+
+  <footer>
+    <form class="ask" id="askForm">
+      <textarea id="query" rows="1" placeholder="Ask a question about this paper…"></textarea>
+      <button type="submit" class="send" id="sendBtn">Ask</button>
+    </form>
+    <div class="hint">Enter to send · Shift+Enter for a new line · Answers cite the pages they come from</div>
+  </footer>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+// Minimal markdown: escape first, then **bold** and `code` (lists/newlines are kept by pre-wrap)
+const renderMarkdown = (t) => escapeHtml(t)
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/`([^`]+)`/g, "<code>$1</code>");
+
+const SUGGESTIONS = ["Summarise the paper", "What are the key concepts?", "Top 5 important findings", "What are the limitations?"];
+
+let papers = [];
+let selected = "";            // "" = all papers, otherwise a document id
+const threads = new Map();    // chat history per selection, so switching papers keeps each conversation
+let busy = false;
+
+// ---------- Papers sidebar ----------
+function paperName(id) {
+  return id ? (papers.find((p) => p.id === id)?.source ?? "Unknown paper") : "All papers";
+}
+
+function renderPapers() {
+  const nav = $("paperList");
+  nav.innerHTML = "";
+
+  const all = document.createElement("button");
+  all.className = "paper all" + (selected === "" ? " active" : "");
+  all.innerHTML = `<div class="meta"><div class="name">All papers</div>
+    <div class="sub">Search across ${papers.length} paper${papers.length === 1 ? "" : "s"}</div></div>`;
+  all.onclick = () => select("");
+  nav.appendChild(all);
+
+  if (!papers.length) {
+    nav.insertAdjacentHTML("beforeend", '<div class="no-papers">No papers yet. Upload a PDF to get started.</div>');
+  }
+
+  for (const p of papers) {
+    const btn = document.createElement("button");
+    btn.className = "paper" + (p.id === selected ? " active" : "");
+    btn.title = p.source;
+    const badge = p.notes_ready
+      ? '<span class="badge ready" title="Summaries are fast">· ready</span>'
+      : '<span class="badge building" title="Reading the full paper in the background">· preparing…</span>';
+    btn.innerHTML = `<div class="meta">
+      <div class="name">${escapeHtml(p.source.replace(/\.pdf$/i, ""))}</div>
+      <div class="sub">pp. ${escapeHtml(p.pages)} ${badge}</div></div>`;
+    btn.onclick = () => select(p.id);
+    nav.appendChild(btn);
+  }
+}
+
+async function loadPapers() {
+  papers = await (await fetch("/documents")).json();
+  if (selected && !papers.some((p) => p.id === selected)) selected = "";
+  renderPapers();
+  $("scopeTitle").textContent = paperName(selected);
+  // Keep polling while any paper's notes are still being built
+  if (papers.some((p) => !p.notes_ready)) setTimeout(() => loadPapers().catch(() => {}), 5000);
+}
+
+function select(id) {
+  selected = id;
+  try { localStorage.setItem("ra:selected", id); } catch {}
+  document.body.classList.remove("nav-open");
+  renderPapers();
+  $("scopeTitle").textContent = paperName(id);
+  $("query").placeholder = id ? "Ask a question about this paper…" : "Ask a question across all papers…";
+  showThread();
+  $("query").focus();
+}
+
+// ---------- Conversation ----------
+function threadFor(id) {
+  if (!threads.has(id)) threads.set(id, document.createElement("div"));
+  return threads.get(id);
+}
+
+function showThread() {
+  const holder = $("thread");
+  holder.innerHTML = "";
+  const t = threadFor(selected);
+  if (!t.childElementCount) holder.appendChild(welcome());
+  holder.appendChild(t);
+  t.style.display = "contents";
+  $("scroller").scrollTop = $("scroller").scrollHeight;
+}
+
+function welcome() {
+  const w = document.createElement("div");
+  w.className = "welcome";
+  if (!papers.length) {
+    w.innerHTML = "<h2>Upload a research paper</h2><p>Drop a PDF in the sidebar, then ask questions about it.</p>";
+    return w;
+  }
+  w.innerHTML = `<h2>${escapeHtml(selected ? paperName(selected).replace(/\.pdf$/i, "") : "All papers")}</h2>
+    <p>${selected ? "Ask anything about this paper." : "Questions search every uploaded paper."}</p>
+    <div class="suggestions"></div>`;
+  for (const s of SUGGESTIONS) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = s;
+    chip.onclick = () => { $("query").value = s; $("askForm").requestSubmit(); };
+    w.querySelector(".suggestions").appendChild(chip);
+  }
+  return w;
+}
+
+function addMessage(thread, role, html = "") {
+  if (thread === threadFor(selected)) $("thread").querySelector(".welcome")?.remove();
+  const el = document.createElement("div");
+  el.className = `msg ${role}`;
+  el.innerHTML = html;
+  thread.appendChild(el);
+  $("scroller").scrollTop = $("scroller").scrollHeight;
+  return el;
+}
+
+function renderSources(el, sources) {
+  if (!sources?.length) return;
+  const box = document.createElement("div");
+  box.className = "sources";
+  for (const s of sources) {
+    const span = document.createElement("span");
+    span.className = "src";
+    const pages = String(s.page).includes("-") ? `pp. ${s.page}` : `p. ${s.page}`;
+    span.textContent = `[${s.id}] ${s.source.replace(/\.pdf$/i, "")} · ${pages}`;
+    box.appendChild(span);
+  }
+  el.appendChild(box);
+}
+
+$("query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("askForm").requestSubmit(); }
+});
+$("query").addEventListener("input", (e) => {
+  e.target.style.height = "auto";
+  e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+});
+
+$("askForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const query = $("query").value.trim();
+  if (!query || busy) return;
+  $("query").value = "";
+  $("query").style.height = "auto";
+  busy = true;
+  $("sendBtn").disabled = true;
+
+  const scope = selected;
+  const thread = threadFor(scope);
+  addMessage(thread, "user", escapeHtml(query));
+  const bot = addMessage(thread, "bot");
+  const answer = document.createElement("div");
+  answer.innerHTML = '<span class="thinking">Searching…</span>';
+  bot.appendChild(answer);
+
+  let text = "", sources = [];
+  try {
+    const res = await fetch("/ask-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, document_id: scope || null }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail?.[0]?.msg || res.statusText);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop();
+      for (const ev of events) {
+        if (!ev.startsWith("data: ")) continue;
+        const msg = JSON.parse(ev.slice(6));
+        if (msg.type === "status") {
+          if (!text) answer.innerHTML = `<span class="thinking">${escapeHtml(msg.message)}</span>`;
+        } else if (msg.type === "sources") {
+          sources = msg.sources;
+        } else if (msg.type === "token") {
+          text += msg.content;
+          answer.innerHTML = renderMarkdown(text);
+        } else if (msg.type === "error") {
+          throw new Error(msg.detail);
+        }
+        if (thread === threadFor(selected)) $("scroller").scrollTop = $("scroller").scrollHeight;
+      }
+    }
+    renderSources(bot, sources);
+  } catch (err) {
+    bot.classList.add("error");
+    answer.textContent = `Error: ${err.message}`;
+  } finally {
+    busy = false;
+    $("sendBtn").disabled = false;
+    $("query").focus();
+    loadPapers().catch(() => {});   // a summary may have just finished a paper's notes
+  }
+};
+
+// ---------- Upload (click or drag & drop) ----------
+async function upload(file) {
+  const status = $("uploadStatus");
+  if (!file || !/\.pdf$/i.test(file.name)) {
+    status.className = "upload-status err";
+    status.textContent = "Please choose a PDF file.";
+    return;
+  }
+  status.className = "upload-status";
+  status.innerHTML = `<span class="thinking">Processing ${escapeHtml(file.name)}…</span>`;
+
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch("/upload", { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    const known = papers.some((p) => p.id === data.document_id);
+    status.className = "upload-status ok";
+    status.textContent = known
+      ? `✓ ${file.name} is already uploaded (same content) — selected it`
+      : `✓ ${file.name} added (${data.chunks} chunks)`;
+    await loadPapers();
+    select(data.document_id);
+  } catch (err) {
+    status.className = "upload-status err";
+    status.textContent = `Upload failed: ${err.message}`;
+  }
+}
+
+const dz = $("dropzone");
+dz.onclick = () => $("fileInput").click();
+dz.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") $("fileInput").click(); };
+$("fileInput").onclick = (e) => e.stopPropagation();
+$("fileInput").onchange = (e) => { upload(e.target.files[0]); e.target.value = ""; };
+dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("drag"); };
+dz.ondragleave = () => dz.classList.remove("drag");
+dz.ondrop = (e) => { e.preventDefault(); dz.classList.remove("drag"); upload(e.dataTransfer.files[0]); };
+
+// ---------- Mobile drawer ----------
+$("menuBtn").onclick = () => document.body.classList.add("nav-open");
+$("backdrop").onclick = () => document.body.classList.remove("nav-open");
+
+// ---------- Start: restore last selection, else the most recent paper ----------
+(async () => {
+  try { await loadPapers(); } catch {}
+  let saved = null;
+  try { saved = localStorage.getItem("ra:selected"); } catch {}
+  const initial = saved !== null && (saved === "" || papers.some((p) => p.id === saved)) ? saved : (papers[0]?.id ?? "");
+  select(initial);
+})();
+</script>
+</body>
+</html>

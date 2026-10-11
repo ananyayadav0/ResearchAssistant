@@ -1,8 +1,12 @@
 __pycache__/
 *.pyc
 .env
+.venv/
+venv/
 renv/
 .idea/
 .vscode/
-chroma_db/
+.DS_Store
+chroma_db*/
+data/
 *.log
